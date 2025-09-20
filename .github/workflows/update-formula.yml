@@ -1,0 +1,112 @@
+name: Update Formula
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours
+  workflow_dispatch:
+  repository_dispatch:
+    types: [new-release]
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Get latest release
+        id: release
+        run: |
+          LATEST_TAG=$(curl -s https://api.github.com/repos/kimulaco/techscan/releases/latest | jq -r '.tag_name')
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Check if update needed
+        id: check
+        run: |
+          CURRENT_VERSION=$(grep -o 'version "[^"]*"' Formula/techscan.rb | sed 's/version "\(.*\)"/\1/')
+          LATEST_VERSION="${{ steps.release.outputs.version }}"
+
+          if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "Current: $CURRENT_VERSION, Latest: $LATEST_VERSION"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "Already up to date: $CURRENT_VERSION"
+          fi
+
+      - name: Download and calculate checksums
+        if: steps.check.outputs.update_needed == 'true'
+        id: checksums
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+
+          # Download release assets
+          curl -L -o darwin-arm64.tar.gz "https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-darwin-arm64.tar.gz"
+          curl -L -o darwin-x64.tar.gz "https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-darwin-x64.tar.gz"
+          curl -L -o linux-x64.tar.gz "https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-linux-x64.tar.gz"
+
+          # Calculate SHA256 checksums
+          DARWIN_ARM64_SHA=$(sha256sum darwin-arm64.tar.gz | cut -d' ' -f1)
+          DARWIN_X64_SHA=$(sha256sum darwin-x64.tar.gz | cut -d' ' -f1)
+          LINUX_X64_SHA=$(sha256sum linux-x64.tar.gz | cut -d' ' -f1)
+
+          echo "darwin_arm64_sha=$DARWIN_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "darwin_x64_sha=$DARWIN_X64_SHA" >> $GITHUB_OUTPUT
+          echo "linux_x64_sha=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
+
+          # Cleanup
+          rm *.tar.gz
+
+      - name: Update Formula
+        if: steps.check.outputs.update_needed == 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          DARWIN_ARM64_SHA="${{ steps.checksums.outputs.darwin_arm64_sha }}"
+          DARWIN_X64_SHA="${{ steps.checksums.outputs.darwin_x64_sha }}"
+          LINUX_X64_SHA="${{ steps.checksums.outputs.linux_x64_sha }}"
+
+          # Update version
+          sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/techscan.rb
+
+          # Update checksums
+          sed -i "0,/sha256 \".*\"/s//sha256 \"$DARWIN_ARM64_SHA\"/" Formula/techscan.rb
+          sed -i "0,/sha256 \".*\"/s//sha256 \"$DARWIN_X64_SHA\"/" Formula/techscan.rb
+          sed -i "0,/sha256 \".*\"/s//sha256 \"$LINUX_X64_SHA\"/" Formula/techscan.rb
+
+      - name: Verify Formula syntax
+        if: steps.check.outputs.update_needed == 'true'
+        run: |
+          ruby -c Formula/techscan.rb
+
+      - name: Create Pull Request
+        if: steps.check.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          commit-message: |
+            Update techscan to v${{ steps.release.outputs.version }}
+
+            - Update version to ${{ steps.release.outputs.version }}
+            - Update SHA256 checksums for all platforms
+            - Auto-generated from new release
+          title: "Update techscan to v${{ steps.release.outputs.version }}"
+          body: |
+            ## Summary
+
+            Auto-update techscan Formula to version `v${{ steps.release.outputs.version }}`.
+
+            ### Changes
+            - Update version from current to `${{ steps.release.outputs.version }}`
+            - Update SHA256 checksums for all platform binaries:
+              - macOS ARM64: `${{ steps.checksums.outputs.darwin_arm64_sha }}`
+              - macOS Intel: `${{ steps.checksums.outputs.darwin_x64_sha }}`
+              - Linux x64: `${{ steps.checksums.outputs.linux_x64_sha }}`
+
+            ### Verification
+            - ✅ Formula syntax verified
+            - ✅ Checksums calculated from official release assets
+            - ✅ All platform binaries available
+
+            This PR was automatically generated from the [techscan release](https://github.com/kimulaco/techscan/releases/tag/v${{ steps.release.outputs.version }}).
+          branch: update-v${{ steps.release.outputs.version }}
+          delete-branch: true
