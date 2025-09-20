@@ -50,7 +50,11 @@ jobs:
           fi
 
           # Extract version with flexible pattern matching (supports both single and double quotes)
-          CURRENT_VERSION=$(grep -E 'version\s+["\'"'"'][^"'"'"']*["\'"'"']' Formula/techscan.rb | sed -E 's/.*version\s+["\'"'"']([^"'"'"']*)["\'"'"'].*/\1/')
+          # First try double quotes, then single quotes
+          CURRENT_VERSION=$(
+            grep -E 'version\s+"[^"]*"' Formula/techscan.rb | sed -E 's/.*version\s+"([^"]*)".*/\1/' 2>/dev/null || \
+            grep -E "version\\s+'[^']*'" Formula/techscan.rb | sed -E "s/.*version\\s+'([^']*)'.*/\\1/" 2>/dev/null || true
+          )
           LATEST_VERSION="${{ steps.release.outputs.version }}"
 
           # Validate that version was extracted successfully
