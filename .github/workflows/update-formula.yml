@@ -17,7 +17,22 @@ jobs:
       - name: Get latest release
         id: release
         run: |
-          LATEST_TAG=$(curl -s https://api.github.com/repos/kimulaco/techscan/releases/latest | jq -r '.tag_name')
+          # Fetch latest release using GitHub CLI with built-in error handling
+          LATEST_TAG=$(gh release list --repo kimulaco/techscan --limit 1 --json tagName --jq '.[0].tagName')
+
+          # Validate tag format and non-empty value
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            echo "Error: No releases found or unable to get valid tag_name"
+            exit 1
+          fi
+
+          # Validate tag format (should start with 'v' followed by version)
+          if ! echo "$LATEST_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "Error: Invalid tag format: $LATEST_TAG"
+            exit 1
+          fi
+
+          echo "Found latest release: $LATEST_TAG"
           echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
           echo "version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
 
@@ -41,15 +56,53 @@ jobs:
         run: |
           VERSION="${{ steps.release.outputs.version }}"
 
-          # Download release assets
-          curl -L -o darwin-arm64.tar.gz "https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-darwin-arm64.tar.gz"
-          curl -L -o darwin-x64.tar.gz "https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-darwin-x64.tar.gz"
-          curl -L -o linux-x64.tar.gz "https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-linux-x64.tar.gz"
+          # Download release assets using GitHub CLI with built-in error handling
+          echo "Downloading release assets for version $VERSION..."
+
+          # Download each asset using gh with automatic error handling
+          for asset in "darwin-arm64" "darwin-x64" "linux-x64"; do
+            ASSET_NAME="techscan-${asset}.tar.gz"
+            echo "Downloading $ASSET_NAME..."
+
+            if ! gh release download "v${VERSION}" --repo kimulaco/techscan --pattern "$ASSET_NAME"; then
+              echo "Error: Failed to download $ASSET_NAME"
+              exit 1
+            fi
+
+            # Rename to expected filename
+            mv "$ASSET_NAME" "${asset}.tar.gz"
+
+            # Verify file was downloaded and is not empty
+            if [ ! -s "${asset}.tar.gz" ]; then
+              echo "Error: Downloaded file ${asset}.tar.gz is empty"
+              exit 1
+            fi
+
+            # Verify it's a valid gzip file
+            if ! gunzip -t "${asset}.tar.gz" 2>/dev/null; then
+              echo "Error: Downloaded file ${asset}.tar.gz is not a valid gzip file"
+              exit 1
+            fi
+
+            echo "Successfully downloaded and verified ${asset}.tar.gz"
+          done
 
           # Calculate SHA256 checksums
+          echo "Calculating SHA256 checksums..."
           DARWIN_ARM64_SHA=$(sha256sum darwin-arm64.tar.gz | cut -d' ' -f1)
           DARWIN_X64_SHA=$(sha256sum darwin-x64.tar.gz | cut -d' ' -f1)
           LINUX_X64_SHA=$(sha256sum linux-x64.tar.gz | cut -d' ' -f1)
+
+          # Validate checksums are not empty
+          if [ -z "$DARWIN_ARM64_SHA" ] || [ -z "$DARWIN_X64_SHA" ] || [ -z "$LINUX_X64_SHA" ]; then
+            echo "Error: Failed to calculate one or more checksums"
+            exit 1
+          fi
+
+          echo "Checksums calculated successfully:"
+          echo "  darwin-arm64: $DARWIN_ARM64_SHA"
+          echo "  darwin-x64: $DARWIN_X64_SHA"
+          echo "  linux-x64: $LINUX_X64_SHA"
 
           echo "darwin_arm64_sha=$DARWIN_ARM64_SHA" >> $GITHUB_OUTPUT
           echo "darwin_x64_sha=$DARWIN_X64_SHA" >> $GITHUB_OUTPUT
