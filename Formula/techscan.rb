@@ -3,11 +3,11 @@ class Techscan < Formula
   homepage "https://github.com/kimulaco/techscan"
   license "MIT"
 
-  version "1.0.1"
+  version "1.0.2"
 
-  darwin_arm64_sha256 = "adbb5f7468717be54c623333fa809d3a0616e84310c0a0f827a485824e48c243"
-  darwin_x64_sha256 = "7a760b3c3bd0b9849df898450515a2bbd888b20c670ebf5cbe289edadb185238"
-  linux_x64_sha256 = "0358c7465422357d9dd98017b00068703409ee15966511d5711ebbe049b1a2b1"
+  darwin_arm64_sha256 = "bc435a3901f57e212cff1da1c57b713468010e8ff643436fecdd7833d91c67fc"
+  darwin_x64_sha256 = "12f0569f2adf83676c92a217ab57123b3d20d14cd6cb2c48910e06c7940e40bc"
+  linux_x64_sha256 = "212faf9293a820e1c519e1841ff2e8b91ae566722d1766f9f228f433d43d8a54"
 
   on_macos do
     if Hardware::CPU.arm?
