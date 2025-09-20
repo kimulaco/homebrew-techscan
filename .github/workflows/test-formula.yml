@@ -1,14 +1,12 @@
 name: Test Formula
 
 on:
-  pull_request:
-    paths:
-      - 'Formula/**'
   push:
     branches:
       - main
-    paths:
-      - 'Formula/**'
+  pull_request:
+    branches:
+      - "*"
   workflow_dispatch:
 
 jobs:
