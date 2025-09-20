@@ -1,0 +1,36 @@
+name: Test Formula
+
+on:
+  pull_request:
+    paths:
+      - 'Formula/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Formula/**'
+  workflow_dispatch:
+
+jobs:
+  test-formula:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@07a2e10c5e201418f928690f897aaff92cf24d3a
+
+      - name: Verify Formula syntax
+        run: ruby -c Formula/techscan.rb
+
+      - name: Homebrew style check
+        run: brew style --formula Formula/techscan.rb
+
+      - name: Homebrew audit
+        run: brew audit --strict --formula Formula/techscan.rb
+
+      - name: Test installation (dry run)
+        run: brew install --formula --dry-run Formula/techscan.rb

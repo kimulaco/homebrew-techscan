@@ -150,11 +150,6 @@ jobs:
           sed -i 's/darwin_x64_sha256 = ".*"/darwin_x64_sha256 = "'"$DARWIN_X64_SHA"'"/' Formula/techscan.rb
           sed -i 's/linux_x64_sha256 = ".*"/linux_x64_sha256 = "'"$LINUX_X64_SHA"'"/' Formula/techscan.rb
 
-      - name: Verify Formula syntax
-        if: steps.check.outputs.update_needed == 'true'
-        run: |
-          ruby -c Formula/techscan.rb
-
       - name: Create Pull Request
         if: steps.check.outputs.update_needed == 'true'
         uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
