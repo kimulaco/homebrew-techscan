@@ -1,0 +1,179 @@
+name: Update Formula
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours
+  workflow_dispatch:
+  repository_dispatch:
+    types: [new-release]
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Get latest release
+        id: release
+        run: |
+          # Fetch latest release using GitHub CLI with built-in error handling
+          # Note: gh CLI automatically uses GITHUB_TOKEN from GitHub Actions environment
+          LATEST_TAG=$(gh release list --repo kimulaco/techscan --limit 1 --json tagName --jq '.[0].tagName')
+
+          # Validate tag format and non-empty value
+          if [ -z "$LATEST_TAG" ] || [ "$LATEST_TAG" = "null" ]; then
+            echo "Error: No releases found or unable to get valid tag_name"
+            exit 1
+          fi
+
+          # Validate tag format (should start with 'v' followed by version)
+          if ! echo "$LATEST_TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "Error: Invalid tag format: $LATEST_TAG"
+            exit 1
+          fi
+
+          echo "Found latest release: $LATEST_TAG"
+          echo "tag=$LATEST_TAG" >> $GITHUB_OUTPUT
+          echo "version=${LATEST_TAG#v}" >> $GITHUB_OUTPUT
+
+      - name: Check if update needed
+        id: check
+        run: |
+          # Verify Formula file exists
+          if [ ! -f "Formula/techscan.rb" ]; then
+            echo "Error: Formula/techscan.rb not found"
+            exit 1
+          fi
+
+          # Extract version
+          CURRENT_VERSION=$(awk -F '"' '/version[[:space:]]+/ {print $2; exit}' Formula/techscan.rb)
+          LATEST_VERSION="${{ steps.release.outputs.version }}"
+
+          # Validate that version was extracted successfully
+          if [ -z "$CURRENT_VERSION" ]; then
+            echo "Error: Could not extract version from Formula/techscan.rb"
+            echo "Please check the formula format"
+            exit 1
+          fi
+
+          if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "Current: $CURRENT_VERSION, Latest: $LATEST_VERSION"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "Already up to date: $CURRENT_VERSION"
+          fi
+
+      - name: Download and calculate checksums
+        if: steps.check.outputs.update_needed == 'true'
+        id: checksums
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+
+          # Download release assets using GitHub CLI with built-in error handling
+          # Note: gh CLI automatically uses GITHUB_TOKEN from GitHub Actions environment
+          echo "Downloading release assets for version $VERSION..."
+
+          # Download each asset using gh with automatic error handling
+          for asset in "darwin-arm64" "darwin-x64" "linux-x64"; do
+            ASSET_NAME="techscan-${asset}.tar.gz"
+            echo "Downloading $ASSET_NAME..."
+
+            if ! gh release download "v${VERSION}" --repo kimulaco/techscan --pattern "$ASSET_NAME"; then
+              echo "Error: Failed to download $ASSET_NAME"
+              exit 1
+            fi
+
+            # Rename to expected filename
+            mv "$ASSET_NAME" "${asset}.tar.gz"
+
+            # Verify file was downloaded and is not empty
+            if [ ! -s "${asset}.tar.gz" ]; then
+              echo "Error: Downloaded file ${asset}.tar.gz is empty"
+              exit 1
+            fi
+
+            # Verify it's a valid gzip file
+            if ! gzip -t "${asset}.tar.gz" 2>/dev/null; then
+              echo "Error: Downloaded file ${asset}.tar.gz is not a valid gzip file"
+              exit 1
+            fi
+
+            echo "Successfully downloaded and verified ${asset}.tar.gz"
+          done
+
+          # Calculate SHA256 checksums
+          echo "Calculating SHA256 checksums..."
+          DARWIN_ARM64_SHA=$(sha256sum darwin-arm64.tar.gz | cut -d' ' -f1)
+          DARWIN_X64_SHA=$(sha256sum darwin-x64.tar.gz | cut -d' ' -f1)
+          LINUX_X64_SHA=$(sha256sum linux-x64.tar.gz | cut -d' ' -f1)
+
+          # Validate checksums are not empty
+          if [ -z "$DARWIN_ARM64_SHA" ] || [ -z "$DARWIN_X64_SHA" ] || [ -z "$LINUX_X64_SHA" ]; then
+            echo "Error: Failed to calculate one or more checksums"
+            exit 1
+          fi
+
+          echo "Checksums calculated successfully:"
+          echo "  darwin-arm64: $DARWIN_ARM64_SHA"
+          echo "  darwin-x64: $DARWIN_X64_SHA"
+          echo "  linux-x64: $LINUX_X64_SHA"
+
+          echo "darwin_arm64_sha=$DARWIN_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "darwin_x64_sha=$DARWIN_X64_SHA" >> $GITHUB_OUTPUT
+          echo "linux_x64_sha=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
+
+          # Cleanup downloaded files
+          rm -f *.tar.gz
+
+      - name: Update Formula
+        if: steps.check.outputs.update_needed == 'true'
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          DARWIN_ARM64_SHA="${{ steps.checksums.outputs.darwin_arm64_sha }}"
+          DARWIN_X64_SHA="${{ steps.checksums.outputs.darwin_x64_sha }}"
+          LINUX_X64_SHA="${{ steps.checksums.outputs.linux_x64_sha }}"
+
+          # Update version
+          sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/techscan.rb
+
+          # Update checksums for each platform
+          sed -i 's/darwin_arm64_sha256 = ".*"/darwin_arm64_sha256 = "'"$DARWIN_ARM64_SHA"'"/' Formula/techscan.rb
+          sed -i 's/darwin_x64_sha256 = ".*"/darwin_x64_sha256 = "'"$DARWIN_X64_SHA"'"/' Formula/techscan.rb
+          sed -i 's/linux_x64_sha256 = ".*"/linux_x64_sha256 = "'"$LINUX_X64_SHA"'"/' Formula/techscan.rb
+
+      - name: Create Pull Request
+        if: steps.check.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          commit-message: |
+            Update techscan to v${{ steps.release.outputs.version }}
+
+            - Update version to ${{ steps.release.outputs.version }}
+            - Update SHA256 checksums for all platforms
+            - Auto-generated from new release
+          title: "Update techscan to v${{ steps.release.outputs.version }}"
+          body: |
+            ## Summary
+
+            Auto-update techscan Formula to version `v${{ steps.release.outputs.version }}`.
+
+            ### Changes
+            - Update version from current to `${{ steps.release.outputs.version }}`
+            - Update SHA256 checksums for all platform binaries:
+              - macOS ARM64: `${{ steps.checksums.outputs.darwin_arm64_sha }}`
+              - macOS Intel: `${{ steps.checksums.outputs.darwin_x64_sha }}`
+              - Linux x64: `${{ steps.checksums.outputs.linux_x64_sha }}`
+
+            ### Verification
+            - ✅ Formula syntax verified
+            - ✅ Checksums calculated from official release assets
+            - ✅ All platform binaries available
+
+            This PR was automatically generated from the [techscan release](https://github.com/kimulaco/techscan/releases/tag/v${{ steps.release.outputs.version }}).
+          branch: update-v${{ steps.release.outputs.version }}
+          delete-branch: true
