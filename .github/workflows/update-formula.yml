@@ -43,8 +43,22 @@ jobs:
       - name: Check if update needed
         id: check
         run: |
-          CURRENT_VERSION=$(grep -o 'version "[^"]*"' Formula/techscan.rb | sed 's/version "\(.*\)"/\1/')
+          # Verify Formula file exists
+          if [ ! -f "Formula/techscan.rb" ]; then
+            echo "Error: Formula/techscan.rb not found"
+            exit 1
+          fi
+
+          # Extract version with flexible pattern matching (supports both single and double quotes)
+          CURRENT_VERSION=$(grep -E 'version\s+["\'"'"'][^"'"'"']*["\'"'"']' Formula/techscan.rb | sed -E 's/.*version\s+["\'"'"']([^"'"'"']*)["\'"'"'].*/\1/')
           LATEST_VERSION="${{ steps.release.outputs.version }}"
+
+          # Validate that version was extracted successfully
+          if [ -z "$CURRENT_VERSION" ]; then
+            echo "Error: Could not extract version from Formula/techscan.rb"
+            echo "Please check the formula format"
+            exit 1
+          fi
 
           if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ]; then
             echo "update_needed=true" >> $GITHUB_OUTPUT
