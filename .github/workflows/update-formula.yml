@@ -69,10 +69,13 @@ jobs:
           # Update version
           sed -i "s/version \".*\"/version \"$VERSION\"/" Formula/techscan.rb
 
-          # Update checksums
-          sed -i "0,/sha256 \".*\"/s//sha256 \"$DARWIN_ARM64_SHA\"/" Formula/techscan.rb
-          sed -i "0,/sha256 \".*\"/s//sha256 \"$DARWIN_X64_SHA\"/" Formula/techscan.rb
-          sed -i "0,/sha256 \".*\"/s//sha256 \"$LINUX_X64_SHA\"/" Formula/techscan.rb
+          # Update checksums for each platform specifically
+          # Update macOS ARM64 sha256 (line containing sha256 after "if Hardware::CPU.arm?")
+          sed -i '/if Hardware::CPU\.arm?/,/else/ { s/sha256 ".*"/sha256 "'"$DARWIN_ARM64_SHA"'"/; }' Formula/techscan.rb
+          # Update macOS Intel sha256 (line containing sha256 after "else" but before "end")
+          sed -i '/else$/,/^  end$/ { /sha256/ s/sha256 ".*"/sha256 "'"$DARWIN_X64_SHA"'"/; }' Formula/techscan.rb
+          # Update Linux sha256 (line containing sha256 in on_linux block)
+          sed -i '/on_linux/,/^  end/ { s/sha256 ".*"/sha256 "'"$LINUX_X64_SHA"'"/; }' Formula/techscan.rb
 
       - name: Verify Formula syntax
         if: steps.check.outputs.update_needed == 'true'
