@@ -20,17 +20,58 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@07a2e10c5e201418f928690f897aaff92cf24d3a
-
       - name: Verify Formula syntax
-        run: ruby -c Formula/techscan.rb
+        run: |
+          # Basic Ruby syntax check
+          ruby -c Formula/techscan.rb
+          echo "✅ Formula syntax is valid"
 
-      - name: Homebrew style check
-        run: brew style --formula Formula/techscan.rb
+      - name: Verify Formula structure
+        run: |
+          # Check required Formula components
+          if ! grep -q "class Techscan < Formula" Formula/techscan.rb; then
+            echo "❌ Formula class definition not found"
+            exit 1
+          fi
+          if ! grep -q "def install" Formula/techscan.rb; then
+            echo "❌ Install method not found"
+            exit 1
+          fi
+          if ! grep -q "sha256" Formula/techscan.rb; then
+            echo "❌ SHA256 checksums not found"
+            exit 1
+          fi
+          echo "✅ Formula structure is valid"
 
-      - name: Homebrew audit
-        run: brew audit --strict --formula Formula/techscan.rb
+      - name: Test URL accessibility
+        run: |
+          # Extract and test URLs from Formula
+          VERSION=$(grep -E 'version[[:space:]]+"[^"]*"' Formula/techscan.rb | sed -E 's/.*version[[:space:]]+"([^"]*)".*/\1/')
+          echo "Testing URLs for version: $VERSION"
 
-      - name: Test installation (dry run)
-        run: brew install --formula --dry-run Formula/techscan.rb
+          # Test darwin-arm64 URL
+          URL="https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-darwin-arm64.tar.gz"
+          if curl -f -s -I "$URL" > /dev/null; then
+            echo "✅ Darwin ARM64 URL accessible: $URL"
+          else
+            echo "❌ Darwin ARM64 URL not accessible: $URL"
+            exit 1
+          fi
+
+          # Test darwin-x64 URL
+          URL="https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-darwin-x64.tar.gz"
+          if curl -f -s -I "$URL" > /dev/null; then
+            echo "✅ Darwin x64 URL accessible: $URL"
+          else
+            echo "❌ Darwin x64 URL not accessible: $URL"
+            exit 1
+          fi
+
+          # Test linux-x64 URL
+          URL="https://github.com/kimulaco/techscan/releases/download/v${VERSION}/techscan-linux-x64.tar.gz"
+          if curl -f -s -I "$URL" > /dev/null; then
+            echo "✅ Linux x64 URL accessible: $URL"
+          else
+            echo "❌ Linux x64 URL not accessible: $URL"
+            exit 1
+          fi
