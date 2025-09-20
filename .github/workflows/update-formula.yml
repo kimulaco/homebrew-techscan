@@ -28,9 +28,10 @@ jobs:
 
       - name: Get latest release
         id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Fetch latest release using GitHub CLI with built-in error handling
-          # Note: gh CLI automatically uses GITHUB_TOKEN from GitHub Actions environment
           LATEST_TAG=$(gh release list --repo kimulaco/techscan --limit 1 --json tagName --jq '.[0].tagName')
 
           # Validate tag format and non-empty value
@@ -80,6 +81,8 @@ jobs:
       - name: Download and calculate checksums
         if: steps.check.outputs.update_needed == 'true'
         id: checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.release.outputs.version }}"
 
