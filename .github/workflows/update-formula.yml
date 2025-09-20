@@ -113,8 +113,8 @@ jobs:
           echo "darwin_x64_sha=$DARWIN_X64_SHA" >> $GITHUB_OUTPUT
           echo "linux_x64_sha=$LINUX_X64_SHA" >> $GITHUB_OUTPUT
 
-          # Cleanup
-          rm *.tar.gz
+          # Cleanup downloaded files
+          rm -f *.tar.gz
 
       - name: Update Formula
         if: steps.check.outputs.update_needed == 'true'
