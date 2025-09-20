@@ -20,6 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
 
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@866b91cc020931c510d42e43e498a7f07d335f60 # v1.259.0
+        with:
+          ruby-version: '3.4.6'
+          bundler-cache: false
+
       - name: Verify Formula syntax
         run: |
           # Basic Ruby syntax check
@@ -46,7 +52,7 @@ jobs:
       - name: Test URL accessibility
         run: |
           # Extract and test URLs from Formula
-          VERSION=$(grep -E 'version[[:space:]]+"[^"]*"' Formula/techscan.rb | sed -E 's/.*version[[:space:]]+"([^"]*)".*/\1/')
+          VERSION=$(awk -F '"' '/version[[:space:]]+/ {print $2; exit}' Formula/techscan.rb)
           echo "Testing URLs for version: $VERSION"
 
           # Test darwin-arm64 URL

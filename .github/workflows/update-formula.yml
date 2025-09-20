@@ -49,12 +49,8 @@ jobs:
             exit 1
           fi
 
-          # Extract version with flexible pattern matching (supports both single and double quotes)
-          # First try double quotes, then single quotes
-          CURRENT_VERSION=$(
-            grep -E 'version\s+"[^"]*"' Formula/techscan.rb | sed -E 's/.*version\s+"([^"]*)".*/\1/' 2>/dev/null || \
-            grep -E "version\\s+'[^']*'" Formula/techscan.rb | sed -E "s/.*version\\s+'([^']*)'.*/\\1/" 2>/dev/null || true
-          )
+          # Extract version
+          CURRENT_VERSION=$(awk -F '"' '/version[[:space:]]+/ {print $2; exit}' Formula/techscan.rb)
           LATEST_VERSION="${{ steps.release.outputs.version }}"
 
           # Validate that version was extracted successfully
@@ -102,7 +98,7 @@ jobs:
             fi
 
             # Verify it's a valid gzip file
-            if ! gunzip -t "${asset}.tar.gz" 2>/dev/null; then
+            if ! gzip -t "${asset}.tar.gz" 2>/dev/null; then
               echo "Error: Downloaded file ${asset}.tar.gz is not a valid gzip file"
               exit 1
             fi
