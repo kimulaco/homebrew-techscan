@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.log
+
+# Homebrew specific
+.brew_home/
+
+# Claude
+.claude
+CLAUDE.md
