@@ -10,6 +10,9 @@ on:
 jobs:
   update-formula:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
@@ -18,6 +21,7 @@ jobs:
         id: release
         run: |
           # Fetch latest release using GitHub CLI with built-in error handling
+          # Note: gh CLI automatically uses GITHUB_TOKEN from GitHub Actions environment
           LATEST_TAG=$(gh release list --repo kimulaco/techscan --limit 1 --json tagName --jq '.[0].tagName')
 
           # Validate tag format and non-empty value
@@ -57,6 +61,7 @@ jobs:
           VERSION="${{ steps.release.outputs.version }}"
 
           # Download release assets using GitHub CLI with built-in error handling
+          # Note: gh CLI automatically uses GITHUB_TOKEN from GitHub Actions environment
           echo "Downloading release assets for version $VERSION..."
 
           # Download each asset using gh with automatic error handling
